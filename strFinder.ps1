@@ -13,7 +13,7 @@ $searchPattern = "ontimechange"
 # =======================
 
 # Write initial header
-"Search Report for '$searchPattern' (Only files with ≥1 occurrence)" | Out-File -FilePath $outputFile -Encoding UTF8
+"Searching for occurrences of '$searchPattern': " | Out-File -FilePath $outputFile -Encoding UTF8
 
 # Get current directory path
 $currentDir = (Get-Location).ProviderPath.TrimEnd('\')
@@ -25,7 +25,7 @@ foreach ($file in $files) {
     try {
         # Read file content based on extension
         if ($file.Extension -ieq ".json") {
-            $text = Get-Content -Path $file.FullName -Raw -ErrorAction Stop
+            $text = [System.IO.File]::ReadAllText($file.FullName)
         }
         elseif ($file.Extension -ieq ".dll") {
             $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
@@ -42,7 +42,7 @@ foreach ($file in $files) {
         if ($count -ge 1) {
             # Compute relative path
             $relativePath = $file.FullName.Replace("$currentDir\", "")
-            "$relativePath - $count occurrences of '$searchPattern'" | Out-File -FilePath $outputFile -Append -Encoding UTF8
+            "$relativePath - $count occurrences" | Out-File -FilePath $outputFile -Append -Encoding UTF8
         }
     }
     catch {
