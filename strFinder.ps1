@@ -12,22 +12,22 @@ $searchPattern = "ontimechange"
 # MAIN SCRIPT
 # =======================
 
-# Write initial header
-"Searching for occurrences of '$searchPattern': " | Out-File -FilePath $outputFile -Encoding UTF8
+# Start fresh
+"--- Pattern matches for '$searchPattern': ---" | Set-Content -Path $outputFile -Encoding UTF8
 
-# Get current directory path
 $currentDir = (Get-Location).ProviderPath.TrimEnd('\')
+$files = Get-ChildItem -Path "." -Include *.json, *.dll, *.xml -Recurse -File
 
-# Recursively get all .json and .dll files
-$files = Get-ChildItem -Path "." -Include *.json, *.dll -Recurse -File
+# Dictionary to track folder totals
+$foundSubfolders = @{}
 
 foreach ($file in $files) {
     try {
-        # Read file content based on extension
-        if ($file.Extension -ieq ".json") {
-            $text = [System.IO.File]::ReadAllText($file.FullName)
-        }
-        elseif ($file.Extension -ieq ".dll") {
+        # Read content based on extension
+	if ($file.Extension -ieq ".json" -or $file.Extension -ieq ".xml") {
+	    $text = [System.IO.File]::ReadAllText($file.FullName)
+	}
+	elseif ($file.Extension -ieq ".dll") {
             $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
             $ascii = [System.Text.Encoding]::ASCII.GetString($bytes)
             $text = ($ascii -split "`0|[^ -~]") -join "`n"
@@ -36,18 +36,46 @@ foreach ($file in $files) {
             continue
         }
 
-        # Count occurrences (case-insensitive)
+        # Count matches
         $count = ([regex]::Matches($text, [regex]::Escape($searchPattern), "IgnoreCase")).Count
 
         if ($count -ge 1) {
-            # Compute relative path
+            # Get relative path
             $relativePath = $file.FullName.Replace("$currentDir\", "")
-            "$relativePath - $count occurrences" | Out-File -FilePath $outputFile -Append -Encoding UTF8
+
+            # Determine immediate subfolder (first path component)
+            $parts = $relativePath -split "[\\/]"
+            $firstFolder = if ($parts.Length -gt 1) { "$($parts[0])\" } else { ".\" }
+
+            # Track total per folder
+            if (-not $foundSubfolders.ContainsKey($firstFolder)) {
+                $foundSubfolders[$firstFolder] = 0
+            }
+            $foundSubfolders[$firstFolder] += $count
+
+            # Write file-level result
+            $line = "$relativePath - $count occurrences"
+            Add-Content -Path $outputFile -Value $line
         }
     }
     catch {
-        "Error processing $($file.FullName): $_" | Out-File -FilePath $outputFile -Append -Encoding UTF8
+        $errorLine = "Error processing $($file.FullName): $_"
+        Add-Content -Path $outputFile -Value $errorLine
     }
 }
 
-Write-Output "`nDone. Filtered results saved to $outputFile"
+# Write summary
+if ($foundSubfolders.Count -gt 0) {
+    Add-Content -Path $outputFile -Value ""
+    Add-Content -Path $outputFile -Value "--- Per mod counts: ---"
+
+    $foundSubfolders.GetEnumerator() |
+        Sort-Object -Property Value -Descending |
+        ForEach-Object {
+            $summaryLine = "$($_.Key): $($_.Value) occurrences"
+            Add-Content -Path $outputFile -Value $summaryLine
+        }
+}
+
+Write-Output "`nDone. Results and summary saved to $outputFile"
+
